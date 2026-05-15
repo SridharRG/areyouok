@@ -175,7 +175,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: link-report
           path: areyouok_report_*.html
