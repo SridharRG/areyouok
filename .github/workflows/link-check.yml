@@ -1,0 +1,65 @@
+name: Check Links
+
+on:
+  schedule:
+    # Every 30 days (1st of each month at 00:00 UTC)
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download AreYouOk
+        run: |
+          curl -L https://github.com/${{ github.repository }}/releases/download/v0.1.0/areyouok-linux-amd64 -o areyouok
+          chmod +x areyouok
+        continue-on-error: true
+
+      - name: Build AreYouOk if download fails
+        if: failure()
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build AreYouOk from source
+        if: failure()
+        run: |
+          cargo build --release
+          cp target/release/areyouok ./areyouok
+
+      - name: Check links
+        run: |
+          ./areyouok -r github -i "node_modules,.git,_site,target" . > link-report.md || true
+        continue-on-error: true
+
+      - name: Create or update issue if broken links found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('link-report.md', 'utf8');
+
+            if (report.includes('Broken Links')) {
+              github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '⚠️ Broken links detected',
+                body: report,
+                labels: ['maintenance', 'broken-links']
+              });
+            }
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: link-report-html
+          path: areyouok_report_*.html
+          retention-days: 30
